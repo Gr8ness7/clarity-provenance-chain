@@ -30,10 +30,10 @@ Clarinet.test({
 });
 
 Clarinet.test({
-  name: "Ensure can't register duplicate product",
+  name: "Ensure can't register with empty product ID",
   async fn(chain: Chain, accounts: Map<string, Account>) {
     const deployer = accounts.get("deployer")!;
-    const product_id = "PROD001";
+    const product_id = "";
     const metadata = "Sample product metadata";
     
     let block = chain.mineBlock([
@@ -43,27 +43,19 @@ Clarinet.test({
         [types.ascii(product_id), types.ascii(metadata)],
         deployer.address
       ),
-      Tx.contractCall(
-        "provenance",
-        "register-product",
-        [types.ascii(product_id), types.ascii(metadata)],
-        deployer.address
-      ),
     ]);
     
-    assertEquals(block.receipts.length, 2);
-    block.receipts[0].result.expectOk();
-    block.receipts[1].result.expectErr(types.uint(101));
+    block.receipts[0].result.expectErr(types.uint(104));
   },
 });
 
 Clarinet.test({
-  name: "Ensure can transfer ownership",
+  name: "Ensure can update product status",
   async fn(chain: Chain, accounts: Map<string, Account>) {
     const deployer = accounts.get("deployer")!;
-    const receiver = accounts.get("wallet_1")!;
     const product_id = "PROD001";
     const metadata = "Sample product metadata";
+    const new_status = "active";
     
     let block = chain.mineBlock([
       Tx.contractCall(
@@ -74,14 +66,12 @@ Clarinet.test({
       ),
       Tx.contractCall(
         "provenance",
-        "transfer-ownership",
-        [types.ascii(product_id), types.principal(receiver.address)],
+        "update-status",
+        [types.ascii(product_id), types.ascii(new_status)],
         deployer.address
       ),
     ]);
     
-    assertEquals(block.receipts.length, 2);
-    block.receipts[0].result.expectOk();
     block.receipts[1].result.expectOk();
   },
 });

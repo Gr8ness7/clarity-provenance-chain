@@ -4,6 +4,7 @@
 (define-constant err-product-exists (err u101))
 (define-constant err-product-not-found (err u102))
 (define-constant err-not-owner (err u103))
+(define-constant err-invalid-input (err u104))
 
 ;; Data structures
 (define-map products
@@ -34,17 +35,35 @@
 (define-public (register-product 
   (product-id (string-ascii 64))
   (metadata (string-ascii 256)))
-  (let ((exists (get-product-details product-id)))
-    (asserts! (is-eq (is-ok exists) false) err-product-exists)
+  (begin
+    (asserts! (> (len product-id) u0) err-invalid-input)
+    (asserts! (> (len metadata) u0) err-invalid-input)
+    (let ((exists (get-product-details product-id)))
+      (asserts! (is-eq (is-ok exists) false) err-product-exists)
+      (print {event: "product-registered", product-id: product-id, owner: tx-sender})
+      (ok (map-set products
+        { product-id: product-id }
+        {
+          owner: tx-sender,
+          manufacturer: tx-sender,
+          creation-date: block-height,
+          status: "created",
+          metadata: metadata
+        }
+      ))
+    )
+  )
+)
+
+(define-public (update-status
+  (product-id (string-ascii 64))
+  (new-status (string-ascii 20)))
+  (let ((product (unwrap! (get-product-details product-id) err-product-not-found)))
+    (asserts! (is-eq (get owner product) tx-sender) err-not-owner)
+    (print {event: "status-updated", product-id: product-id, status: new-status})
     (ok (map-set products
       { product-id: product-id }
-      {
-        owner: tx-sender,
-        manufacturer: tx-sender,
-        creation-date: block-height,
-        status: "created",
-        metadata: metadata
-      }
+      (merge product { status: new-status })
     ))
   )
 )
@@ -54,6 +73,7 @@
   (new-owner principal))
   (let ((product (unwrap! (get-product-details product-id) err-product-not-found)))
     (asserts! (is-eq (get owner product) tx-sender) err-not-owner)
+    (print {event: "ownership-transferred", product-id: product-id, from: tx-sender, to: new-owner})
     (map-set products
       { product-id: product-id }
       (merge product { owner: new-owner })
@@ -90,4 +110,8 @@
 
 (define-read-only (get-history-entry (product-id (string-ascii 64)) (sequence uint))
   (map-get? history { product-id: product-id, sequence: sequence })
+)
+
+(define-read-only (get-history-sequence) 
+  (var-get history-sequence)
 )
