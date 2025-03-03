@@ -75,3 +75,56 @@ Clarinet.test({
     block.receipts[1].result.expectOk();
   },
 });
+
+Clarinet.test({
+  name: "Ensure can transfer ownership",
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const deployer = accounts.get("deployer")!;
+    const wallet1 = accounts.get("wallet_1")!;
+    const product_id = "PROD001";
+    const metadata = "Sample product metadata";
+    
+    let block = chain.mineBlock([
+      Tx.contractCall(
+        "provenance",
+        "register-product",
+        [types.ascii(product_id), types.ascii(metadata)],
+        deployer.address
+      ),
+      Tx.contractCall(
+        "provenance",
+        "transfer-ownership",
+        [types.ascii(product_id), types.principal(wallet1.address)],
+        deployer.address
+      ),
+    ]);
+    
+    block.receipts[1].result.expectOk().expectBool(true);
+  },
+});
+
+Clarinet.test({
+  name: "Ensure can't transfer to self",
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const deployer = accounts.get("deployer")!;
+    const product_id = "PROD001";
+    const metadata = "Sample product metadata";
+    
+    let block = chain.mineBlock([
+      Tx.contractCall(
+        "provenance",
+        "register-product",
+        [types.ascii(product_id), types.ascii(metadata)],
+        deployer.address
+      ),
+      Tx.contractCall(
+        "provenance",
+        "transfer-ownership",
+        [types.ascii(product_id), types.principal(deployer.address)],
+        deployer.address
+      ),
+    ]);
+    
+    block.receipts[1].result.expectErr(types.uint(105));
+  },
+});
