@@ -5,6 +5,7 @@
 (define-constant err-product-not-found (err u102))
 (define-constant err-not-owner (err u103))
 (define-constant err-invalid-input (err u104))
+(define-constant err-self-transfer (err u105))
 
 ;; Data structures
 (define-map products
@@ -58,28 +59,35 @@
 (define-public (update-status
   (product-id (string-ascii 64))
   (new-status (string-ascii 20)))
-  (let ((product (unwrap! (get-product-details product-id) err-product-not-found)))
-    (asserts! (is-eq (get owner product) tx-sender) err-not-owner)
-    (print {event: "status-updated", product-id: product-id, status: new-status})
-    (ok (map-set products
-      { product-id: product-id }
-      (merge product { status: new-status })
-    ))
+  (begin
+    (asserts! (> (len new-status) u0) err-invalid-input)
+    (asserts! (<= (len new-status) u20) err-invalid-input)
+    (let ((product (unwrap! (get-product-details product-id) err-product-not-found)))
+      (asserts! (is-eq (get owner product) tx-sender) err-not-owner)
+      (print {event: "status-updated", product-id: product-id, status: new-status})
+      (ok (map-set products
+        { product-id: product-id }
+        (merge product { status: new-status })
+      ))
+    )
   )
 )
 
 (define-public (transfer-ownership
   (product-id (string-ascii 64))
   (new-owner principal))
-  (let ((product (unwrap! (get-product-details product-id) err-product-not-found)))
-    (asserts! (is-eq (get owner product) tx-sender) err-not-owner)
-    (print {event: "ownership-transferred", product-id: product-id, from: tx-sender, to: new-owner})
-    (map-set products
-      { product-id: product-id }
-      (merge product { owner: new-owner })
+  (begin
+    (asserts! (not (is-eq tx-sender new-owner)) err-self-transfer)
+    (let ((product (unwrap! (get-product-details product-id) err-product-not-found)))
+      (asserts! (is-eq (get owner product) tx-sender) err-not-owner)
+      (print {event: "ownership-transferred", product-id: product-id, from: tx-sender, to: new-owner})
+      (map-set products
+        { product-id: product-id }
+        (merge product { owner: new-owner })
+      )
+      (record-history product-id tx-sender new-owner "transfer")
+      (ok true)
     )
-    (record-history product-id tx-sender new-owner "transfer")
-    (ok true)
   )
 )
 
@@ -114,4 +122,17 @@
 
 (define-read-only (get-history-sequence) 
   (var-get history-sequence)
+)
+
+(define-read-only (get-complete-history (product-id (string-ascii 64)))
+  (let ((sequence (var-get history-sequence)))
+    (filter not-none 
+      (map 
+        (lambda (seq) 
+          (get-history-entry product-id seq)
+        )
+        (list sequence)
+      )
+    )
+  )
 )
